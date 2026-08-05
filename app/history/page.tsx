@@ -3,6 +3,20 @@
 import { useEffect, useMemo, useState } from "react";
 import type { ArticleSortBy, HistoryEntry } from "@/lib/types";
 
+const UTC_DATE_TIME_FORMATTER = new Intl.DateTimeFormat("en-US", {
+  dateStyle: "medium",
+  timeStyle: "short",
+  timeZone: "UTC",
+});
+
+function formatUtcDateTime(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+  return `${UTC_DATE_TIME_FORMATTER.format(date)} UTC`;
+}
+
 export default function HistoryPage() {
   const [sortBy, setSortBy] = useState<ArticleSortBy>("createTime");
   const [searchText, setSearchText] = useState("");
@@ -111,7 +125,7 @@ export default function HistoryPage() {
                   {entry.city} · {entry.topic}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Article: {new Date(entry.articleTime).toLocaleString()}
+                  Article: {formatUtcDateTime(entry.articleTime)}
                 </p>
               </button>
             ))}
@@ -129,8 +143,8 @@ export default function HistoryPage() {
                   {selectedEntry.city} · {selectedEntry.topic}
                 </p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Article time: {new Date(selectedEntry.articleTime).toLocaleString()} ·
-                  Created: {new Date(selectedEntry.createTime).toLocaleString()}
+                  Article time: {formatUtcDateTime(selectedEntry.articleTime)} · Created:{" "}
+                  {formatUtcDateTime(selectedEntry.createTime)}
                 </p>
               </div>
 

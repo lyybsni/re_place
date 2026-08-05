@@ -19,8 +19,8 @@ export default function HomeDashboard() {
   useEffect(() => {
     async function load() {
       const [cityRes, topicRes] = await Promise.all([
-        fetch("/api/recommendations/today"),
         fetch("/api/idealization/today"),
+        fetch("/api/recommendations/today"),
       ]);
 
       if (cityRes.ok) {
@@ -29,8 +29,10 @@ export default function HomeDashboard() {
       }
 
       if (topicRes.ok) {
-        const topicData = (await topicRes.json()) as TopicRecommendation[];
-        setTopics(topicData.slice(0, 5));
+        const topicData = (await topicRes.json()) as unknown;
+        if (Array.isArray(topicData)) {
+          setTopics(topicData.slice(0, 5) as TopicRecommendation[]);
+        }
       }
     }
 
