@@ -1,6 +1,14 @@
 import { NextResponse } from "next/server";
-import { todayCityRecommendation } from "@/lib/mock-data";
+import { errorResponse } from "@/lib/server/api-error";
+import { requireSession } from "@/lib/server/auth-session";
+import { getTodayTopicRecommendations } from "@/lib/server/repositories/articles-repository";
 
 export async function GET() {
-  return NextResponse.json(todayCityRecommendation);
+  try {
+    const session = await requireSession();
+    const topics = await getTodayTopicRecommendations(session.userId);
+    return NextResponse.json(topics.slice(0, 5));
+  } catch (error) {
+    return errorResponse(error);
+  }
 }

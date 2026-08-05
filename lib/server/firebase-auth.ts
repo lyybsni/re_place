@@ -39,7 +39,8 @@ export class FirebaseAuthError extends Error {
 }
 
 function getFirebaseApiKey() {
-  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY?.trim();
+  const apiKey =
+    readEnv("FIREBASE_API_KEY") ?? readEnv("NEXT_PUBLIC_FIREBASE_API_KEY");
   if (!apiKey) {
     throw new FirebaseAuthError("FIREBASE_API_KEY is not configured.", 500);
   }
@@ -112,7 +113,8 @@ export async function signInWithEmailPassword(
 }
 
 export async function signInWithGoogleIdToken(idToken: string) {
-  const authDomain = process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN?.trim();
+  const authDomain =
+    readEnv("FIREBASE_AUTH_DOMAIN") ?? readEnv("NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN");
   const requestUri =
     authDomain && authDomain.length > 0
       ? `https://${authDomain}/auth/callback`
@@ -202,3 +204,4 @@ function decodeJwtPayload(idToken: string): FirebaseTokenInfo {
     exp: expNumeric,
   };
 }
+import { readEnv } from "@/lib/server/env";

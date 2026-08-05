@@ -1,101 +1,69 @@
 import { NextRequest, NextResponse } from "next/server";
-import { historyEntries } from "@/lib/mock-data";
-import type { ArticleSortBy } from "@/lib/types";
-
-const MAX_IMAGE_COUNT = 3;
-const MAX_CONTENT_CHARS = 600;
-
-function countCharacters(input: string): number {
-  return [...input].length;
-}
-
-function normalizeSortBy(value: string | null): ArticleSortBy {
-  if (
-    value === "articleTime" ||
-    value === "createTime" ||
-    value === "topic" ||
-    value === "title"
-  ) {
-    return value;
-  }
-  return "createTime";
-}
-
-function searchableText(entry: (typeof historyEntries)[number]): string {
-  return [
-    entry.title,
-    entry.city,
-    entry.topic,
-    entry.content,
-    entry.tags.join(" "),
-    entry.aiExtracted.summary,
-    entry.aiExtracted.keywords.join(" "),
-  ]
-    .join(" ")
-    .toLowerCase();
-}
+import { randomUUID } from "node:crypto";
+import { errorResponse } from "@/lib/server/api-error";
+import { requireSession } from "@/lib/server/auth-session";
+import {
+  createArticle,
+  listArticles,
+  validateArticlePayload,
+} from "@/lib/server/repositories/articles-repository";
+import { deleteStorageObjects, uploadArticleImages } from "@/lib/server/storage";
 
 export async function GET(request: NextRequest) {
-  const sortBy = normalizeSortBy(request.nextUrl.searchParams.get("sortBy"));
-  const search = request.nextUrl.searchParams.get("search")?.trim() ?? "";
-  const searchQuery = search.toLowerCase();
-
-  const entries = historyEntries.filter((entry) => {
-    if (!searchQuery) {
-      return true;
-    }
-    return searchableText(entry).includes(searchQuery);
-  });
-
-  if (sortBy === "articleTime") {
-    entries.sort(
-      (a, b) => Date.parse(b.articleTime) - Date.parse(a.articleTime),
-    );
-  } else if (sortBy === "topic") {
-    entries.sort((a, b) => a.topic.localeCompare(b.topic));
-  } else if (sortBy === "title") {
-    entries.sort((a, b) => a.title.localeCompare(b.title));
-  } else {
-    entries.sort((a, b) => Date.parse(b.createTime) - Date.parse(a.createTime));
+  try {
+    const session = await requireSession();
+    const sortBy = request.nextUrl.searchParams.get("sortBy");
+    const search = request.nextUrl.searchParams.get("search");
+    const result = await listArticles(session.userId, sortBy, search);
+    return NextResponse.json(result);
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  return NextResponse.json({ sortBy, search, entries });
 }
 
 export async function POST(request: NextRequest) {
-  const payload = (await request.json()) as {
-    title?: string;
-    content?: string;
-    imageUrls?: string[];
-    useAiFineTune?: boolean;
-  };
+  let uploadedPaths: string[] = [];
+  try {
+    const session = await requireSession();
+    const payload = (await request.json()) as {
+      title?: string;
+      content?: string;
+      imageUrls?: string[];
+      useAiFineTune?: boolean;
+      articleTime?: string;
+    };
 
-  const content = payload.content ?? "";
-  const imageUrls = payload.imageUrls ?? [];
+    const title = payload.title ?? "";
+    const content = payload.content ?? "";
+    const imageUrls = payload.imageUrls ?? [];
+    validateArticlePayload(content, imageUrls);
 
-  if (imageUrls.length > MAX_IMAGE_COUNT) {
+    const articleId = randomUUID();
+    const uploaded = await uploadArticleImages(session.userId, articleId, imageUrls);
+    uploadedPaths = uploaded.map((item) => item.path);
+
+    const entry = await createArticle(session.userId, {
+      id: articleId,
+      title,
+      content,
+      imageUrls: uploaded.map((item) => item.url),
+      imageStoragePaths: uploadedPaths,
+      useAiFineTune: Boolean(payload.useAiFineTune),
+      articleTime: payload.articleTime,
+    });
+
     return NextResponse.json(
       {
-        message: `At most ${MAX_IMAGE_COUNT} images are allowed.`,
+        message: "Article created.",
+        accepted: true,
+        entry,
       },
-      { status: 400 },
+      { status: 201 },
     );
+  } catch (error) {
+    if (uploadedPaths.length > 0) {
+      await deleteStorageObjects(uploadedPaths);
+    }
+    return errorResponse(error);
   }
-
-  if (countCharacters(content) > MAX_CONTENT_CHARS) {
-    return NextResponse.json(
-      {
-        message: `At most ${MAX_CONTENT_CHARS} characters are allowed.`,
-      },
-      { status: 400 },
-    );
-  }
-
-  return NextResponse.json(
-    {
-      message: "Article accepted by skeleton endpoint.",
-      accepted: true,
-    },
-    { status: 201 },
-  );
 }

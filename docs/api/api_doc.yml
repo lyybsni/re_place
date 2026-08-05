@@ -19,7 +19,7 @@ paths:
   /api/articles:
     get:
       tags: [Articles]
-      summary: List and search articles
+      summary: List and search current user's articles
       parameters:
         - in: query
           name: sortBy
@@ -40,10 +40,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/ArticleListResponse"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 
     post:
       tags: [Articles]
-      summary: Create article (skeleton endpoint)
+      summary: Create article and upload images to Firebase Storage
       requestBody:
         required: true
         content:
@@ -52,13 +58,19 @@ paths:
               $ref: "#/components/schemas/ArticleCreateRequest"
       responses:
         "201":
-          description: Accepted by skeleton endpoint
+          description: Created article
           content:
             application/json:
               schema:
-                $ref: "#/components/schemas/ArticleCreateResponse"
+                $ref: "#/components/schemas/ArticleCreateSuccessResponse"
         "400":
           description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
           content:
             application/json:
               schema:
@@ -67,7 +79,7 @@ paths:
   /api/admin/ai-options:
     get:
       tags: [Admin]
-      summary: Get current AI mode
+      summary: Get current AI mode from Firestore
       responses:
         "200":
           description: Current mode
@@ -75,10 +87,16 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/AiModeResponse"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 
     patch:
       tags: [Admin]
-      summary: Update AI mode
+      summary: Update AI mode in Firestore
       requestBody:
         required: true
         content:
@@ -98,6 +116,12 @@ paths:
                 $ref: "#/components/schemas/AiModeResponse"
         "400":
           description: Invalid mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
           content:
             application/json:
               schema:
@@ -186,7 +210,7 @@ paths:
   /api/idealization/today:
     get:
       tags: [Idealization]
-      summary: Get today's city recommendation
+      summary: Get city recommendation derived from current user's history
       responses:
         "200":
           description: Today's recommendation
@@ -194,11 +218,17 @@ paths:
             application/json:
               schema:
                 $ref: "#/components/schemas/CityRecommendation"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 
   /api/recommendations/today:
     get:
       tags: [Recommendations]
-      summary: Get today's topic recommendations
+      summary: Get topic recommendations derived from current user's history
       responses:
         "200":
           description: Topic recommendation list
@@ -209,11 +239,17 @@ paths:
                 maxItems: 5
                 items:
                   $ref: "#/components/schemas/TopicRecommendation"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
 
   /api/places/digest:
     get:
       tags: [Places]
-      summary: Get place digest by city
+      summary: Get current user's place digest by city
       parameters:
         - in: query
           name: city
@@ -230,6 +266,12 @@ paths:
                 $ref: "#/components/schemas/PlaceDigest"
         "400":
           description: Missing city query param
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
           content:
             application/json:
               schema:
@@ -320,6 +362,7 @@ components:
 
     ArticleCreateRequest:
       type: object
+      required: [content, imageUrls, useAiFineTune]
       properties:
         title:
           type: string
@@ -331,18 +374,20 @@ components:
           maxItems: 3
           items:
             type: string
-            format: uri
+            description: Base64 data URL, e.g. data:image/png;base64,...
         useAiFineTune:
           type: boolean
 
-    ArticleCreateResponse:
+    ArticleCreateSuccessResponse:
       type: object
-      required: [message, accepted]
+      required: [message, accepted, entry]
       properties:
         message:
           type: string
         accepted:
           type: boolean
+        entry:
+          $ref: "#/components/schemas/HistoryEntry"
 
     HistoryEntryAiExtracted:
       type: object

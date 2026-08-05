@@ -1,30 +1,19 @@
 import { NextRequest, NextResponse } from "next/server";
-import { placeDigests } from "@/lib/mock-data";
+import { ApiError, errorResponse } from "@/lib/server/api-error";
+import { requireSession } from "@/lib/server/auth-session";
+import { getPlaceDigest } from "@/lib/server/repositories/articles-repository";
 
 export async function GET(request: NextRequest) {
-  const city = request.nextUrl.searchParams.get("city");
+  try {
+    const city = request.nextUrl.searchParams.get("city");
+    if (!city?.trim()) {
+      throw new ApiError(400, "Missing required query param: city");
+    }
 
-  if (!city) {
-    return NextResponse.json(
-      { message: "Missing required query param: city" },
-      { status: 400 },
-    );
+    const session = await requireSession();
+    const digest = await getPlaceDigest(session.userId, city, session.email);
+    return NextResponse.json(digest);
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  const normalized = city.toLowerCase();
-  const digest = placeDigests[normalized];
-
-  if (!digest) {
-    return NextResponse.json(
-      {
-        city,
-        articleCount: 0,
-        avatars: [],
-        topics: [],
-      },
-      { status: 200 },
-    );
-  }
-
-  return NextResponse.json(digest);
 }

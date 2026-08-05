@@ -1,22 +1,26 @@
 import { NextResponse } from "next/server";
 import type { AiMode } from "@/lib/types";
-
-let mode: AiMode = "llm";
+import { errorResponse } from "@/lib/server/api-error";
+import { requireSession } from "@/lib/server/auth-session";
+import { getAiMode, updateAiMode } from "@/lib/server/repositories/admin-repository";
 
 export async function GET() {
-  return NextResponse.json({ mode });
+  try {
+    await requireSession();
+    const mode = await getAiMode();
+    return NextResponse.json({ mode });
+  } catch (error) {
+    return errorResponse(error);
+  }
 }
 
 export async function PATCH(request: Request) {
-  const payload = (await request.json()) as { mode?: AiMode };
-
-  if (payload.mode !== "naive" && payload.mode !== "llm") {
-    return NextResponse.json(
-      { message: "mode must be 'naive' or 'llm'" },
-      { status: 400 },
-    );
+  try {
+    await requireSession();
+    const payload = (await request.json()) as { mode?: AiMode };
+    const mode = await updateAiMode(payload.mode);
+    return NextResponse.json({ mode });
+  } catch (error) {
+    return errorResponse(error);
   }
-
-  mode = payload.mode;
-  return NextResponse.json({ mode });
 }
