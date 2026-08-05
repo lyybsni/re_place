@@ -18,6 +18,18 @@ Open [http://localhost:3000](http://localhost:3000) with your browser to see the
 
 You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
 
+## Authentication Environment Variables
+
+Create `.env.local` with:
+
+```bash
+FIREBASE_API_KEY=your_firebase_web_api_key
+FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_oauth_web_client_id
+```
+
+The auth BFF endpoints (`/api/auth/login`, `/api/auth/logout`, `/api/auth/refresh`, `/api/auth/session`) rely on these values.
+
 This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
 
 ## Learn More

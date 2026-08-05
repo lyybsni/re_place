@@ -1,8 +1,8 @@
 import { NextResponse } from "next/server";
+import { clearAuthCookies } from "@/lib/server/auth-cookies";
 
 export async function POST() {
-  return NextResponse.json(
-    { message: "Logout endpoint skeleton." },
-    { status: 501 },
-  );
+  const response = NextResponse.json({ authenticated: false });
+  clearAuthCookies(response);
+  return response;
 }

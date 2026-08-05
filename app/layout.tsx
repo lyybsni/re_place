@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
+import AuthHeader from "@/app/_components/auth-header";
 import AppFooter from "@/app/_components/app-footer";
 import DomReadyGate from "@/app/_components/dom-ready-gate";
 import "./globals.css";
@@ -27,6 +28,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
     >
       <body className="min-h-full flex flex-col">
         <DomReadyGate>
+          <AuthHeader />
           {children}
           <AppFooter />
         </DomReadyGate>

@@ -1,0 +1,460 @@
+openapi: 3.0.3
+info:
+  title: re_place API
+  version: 0.1.0
+  description: API contract generated from current Next.js app/api routes.
+
+servers:
+  - url: http://localhost:3000
+
+tags:
+  - name: Articles
+  - name: Admin
+  - name: Auth
+  - name: Idealization
+  - name: Recommendations
+  - name: Places
+
+paths:
+  /api/articles:
+    get:
+      tags: [Articles]
+      summary: List and search articles
+      parameters:
+        - in: query
+          name: sortBy
+          schema:
+            type: string
+            enum: [articleTime, createTime, topic, title]
+            default: createTime
+          description: Sort field. Invalid value falls back to createTime.
+        - in: query
+          name: search
+          schema:
+            type: string
+          description: Full-text search over title/city/topic/content/tags/AI fields.
+      responses:
+        "200":
+          description: Article list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleListResponse"
+
+    post:
+      tags: [Articles]
+      summary: Create article (skeleton endpoint)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/ArticleCreateRequest"
+      responses:
+        "201":
+          description: Accepted by skeleton endpoint
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ArticleCreateResponse"
+        "400":
+          description: Validation failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/admin/ai-options:
+    get:
+      tags: [Admin]
+      summary: Get current AI mode
+      responses:
+        "200":
+          description: Current mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModeResponse"
+
+    patch:
+      tags: [Admin]
+      summary: Update AI mode
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [mode]
+              properties:
+                mode:
+                  $ref: "#/components/schemas/AiMode"
+      responses:
+        "200":
+          description: Updated mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiModeResponse"
+        "400":
+          description: Invalid mode
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/auth/login:
+    post:
+      tags: [Auth]
+      summary: Login with email/password or Google ID token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/LoginRequest"
+      responses:
+        "200":
+          description: Logged in and cookies set
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedSession"
+        "400":
+          description: Invalid payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Authentication failed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/auth/logout:
+    post:
+      tags: [Auth]
+      summary: Logout and clear auth cookies
+      responses:
+        "200":
+          description: Logged out
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/UnauthenticatedSession"
+
+  /api/auth/refresh:
+    post:
+      tags: [Auth]
+      summary: Refresh ID token from refresh token
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/RefreshRequest"
+      responses:
+        "200":
+          description: Refreshed and cookies updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AuthenticatedSession"
+        "401":
+          description: Missing or invalid refresh token
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/auth/session:
+    get:
+      tags: [Auth]
+      summary: Resolve current session from auth cookies
+      responses:
+        "200":
+          description: Authenticated or unauthenticated session state
+          content:
+            application/json:
+              schema:
+                oneOf:
+                  - $ref: "#/components/schemas/AuthenticatedSession"
+                  - $ref: "#/components/schemas/UnauthenticatedSession"
+
+  /api/idealization/today:
+    get:
+      tags: [Idealization]
+      summary: Get today's city recommendation
+      responses:
+        "200":
+          description: Today's recommendation
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/CityRecommendation"
+
+  /api/recommendations/today:
+    get:
+      tags: [Recommendations]
+      summary: Get today's topic recommendations
+      responses:
+        "200":
+          description: Topic recommendation list
+          content:
+            application/json:
+              schema:
+                type: array
+                maxItems: 5
+                items:
+                  $ref: "#/components/schemas/TopicRecommendation"
+
+  /api/places/digest:
+    get:
+      tags: [Places]
+      summary: Get place digest by city
+      parameters:
+        - in: query
+          name: city
+          required: true
+          schema:
+            type: string
+          description: City name (case-insensitive lookup).
+      responses:
+        "200":
+          description: Place digest (returns empty digest if city not found)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/PlaceDigest"
+        "400":
+          description: Missing city query param
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+components:
+  schemas:
+    AiMode:
+      type: string
+      enum: [naive, llm]
+
+    AiModeResponse:
+      type: object
+      required: [mode]
+      properties:
+        mode:
+          $ref: "#/components/schemas/AiMode"
+
+    ErrorMessage:
+      type: object
+      required: [message]
+      properties:
+        message:
+          type: string
+
+    LoginRequest:
+      oneOf:
+        - type: object
+          required: [provider, email, password]
+          properties:
+            provider:
+              type: string
+              enum: [email]
+            email:
+              type: string
+              format: email
+            password:
+              type: string
+        - type: object
+          required: [provider, idToken]
+          properties:
+            provider:
+              type: string
+              enum: [google]
+            idToken:
+              type: string
+
+    RefreshRequest:
+      type: object
+      properties:
+        refreshToken:
+          type: string
+
+    AuthenticatedUser:
+      type: object
+      required: [userId, email]
+      properties:
+        userId:
+          type: string
+        email:
+          type: string
+          format: email
+
+    AuthenticatedSession:
+      type: object
+      required: [authenticated, user, expiresAt]
+      properties:
+        authenticated:
+          type: boolean
+          enum: [true]
+        user:
+          $ref: "#/components/schemas/AuthenticatedUser"
+        expiresAt:
+          type: integer
+          description: Unix timestamp in seconds.
+
+    UnauthenticatedSession:
+      type: object
+      required: [authenticated]
+      properties:
+        authenticated:
+          type: boolean
+          enum: [false]
+
+    ArticleSortBy:
+      type: string
+      enum: [articleTime, createTime, topic, title]
+
+    ArticleCreateRequest:
+      type: object
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+          description: Max 600 characters.
+        imageUrls:
+          type: array
+          maxItems: 3
+          items:
+            type: string
+            format: uri
+        useAiFineTune:
+          type: boolean
+
+    ArticleCreateResponse:
+      type: object
+      required: [message, accepted]
+      properties:
+        message:
+          type: string
+        accepted:
+          type: boolean
+
+    HistoryEntryAiExtracted:
+      type: object
+      required: [summary, keywords, places]
+      properties:
+        summary:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        places:
+          type: array
+          items:
+            type: string
+
+    HistoryEntry:
+      type: object
+      required:
+        [id, title, city, topic, tags, content, imageUrls, aiExtracted, articleTime, createTime]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        city:
+          type: string
+        topic:
+          type: string
+        tags:
+          type: array
+          items:
+            type: string
+        content:
+          type: string
+        imageUrls:
+          type: array
+          items:
+            type: string
+            format: uri
+        aiExtracted:
+          $ref: "#/components/schemas/HistoryEntryAiExtracted"
+        articleTime:
+          type: string
+          format: date-time
+        createTime:
+          type: string
+          format: date-time
+
+    ArticleListResponse:
+      type: object
+      required: [sortBy, search, entries]
+      properties:
+        sortBy:
+          $ref: "#/components/schemas/ArticleSortBy"
+        search:
+          type: string
+        entries:
+          type: array
+          items:
+            $ref: "#/components/schemas/HistoryEntry"
+
+    CityRecommendationDigest:
+      type: object
+      required: [ingestedArticles, topTopics]
+      properties:
+        ingestedArticles:
+          type: integer
+        topTopics:
+          type: array
+          items:
+            type: string
+
+    CityRecommendation:
+      type: object
+      required: [city, brief, highlights, digest]
+      properties:
+        city:
+          type: string
+        brief:
+          type: string
+        highlights:
+          type: array
+          items:
+            type: string
+        digest:
+          $ref: "#/components/schemas/CityRecommendationDigest"
+
+    TopicRecommendation:
+      type: object
+      required: [id, title, reason]
+      properties:
+        id:
+          type: string
+        title:
+          type: string
+        reason:
+          type: string
+
+    PlaceDigest:
+      type: object
+      required: [city, articleCount, avatars, topics]
+      properties:
+        city:
+          type: string
+        articleCount:
+          type: integer
+        avatars:
+          type: array
+          items:
+            type: string
+        topics:
+          type: array
+          items:
+            type: string
