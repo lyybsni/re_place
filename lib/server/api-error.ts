@@ -23,6 +23,23 @@ export function toApiError(error: unknown) {
 
 export function errorResponse(error: unknown) {
   const apiError = toApiError(error);
+  if (error instanceof Error) {
+    console.error("[API ERROR]", {
+      status: apiError.status,
+      code: apiError.code,
+      message: apiError.message,
+      name: error.name,
+      stack: error.stack,
+      cause: error.cause,
+    });
+  } else {
+    console.error("[API ERROR]", {
+      status: apiError.status,
+      code: apiError.code,
+      message: apiError.message,
+      error,
+    });
+  }
   return NextResponse.json(
     {
       message: apiError.message,

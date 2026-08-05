@@ -1,5 +1,5 @@
 import { getApps, initializeApp, cert } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { initializeFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 import { ApiError } from "@/lib/server/api-error";
 import { readEnv, requireEnv } from "@/lib/server/env";
@@ -8,15 +8,21 @@ function decodePrivateKey(input: string) {
   return input.replace(/\\n/g, "\n");
 }
 
+let firestoreInstance: Firestore | null = null;
+
 function initializeFirebaseAdmin() {
   if (getApps().length > 0) {
     return getApps()[0];
   }
 
-  const projectId = requireEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
-  const storageBucket = requireEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
-  const clientEmail = readEnv("NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL");
-  const privateKey = readEnv("NEXT_PUBLIC_FIREBASE_PRIVATE_KEY");
+  const projectId =
+    readEnv("FIREBASE_PROJECT_ID") ?? requireEnv("NEXT_PUBLIC_FIREBASE_PROJECT_ID");
+  const storageBucket =
+    readEnv("FIREBASE_STORAGE_BUCKET") ?? requireEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
+  const clientEmail =
+    readEnv("FIREBASE_CLIENT_EMAIL") ?? readEnv("NEXT_PUBLIC_FIREBASE_CLIENT_EMAIL");
+  const privateKey =
+    readEnv("FIREBASE_PRIVATE_KEY") ?? readEnv("NEXT_PUBLIC_FIREBASE_PRIVATE_KEY");
   const credentialsPath = readEnv("GOOGLE_APPLICATION_CREDENTIALS");
 
   if (clientEmail && privateKey) {
@@ -45,9 +51,26 @@ function initializeFirebaseAdmin() {
 }
 
 export function db() {
-  return getFirestore(initializeFirebaseAdmin());
+  if (firestoreInstance) {
+    return firestoreInstance;
+  }
+
+  const app = initializeFirebaseAdmin();
+  const databaseId = readEnv("NEXT_PUBLIC_FIRESTORE_DATABASE_ID") ?? "default";
+
+  firestoreInstance = initializeFirestore(
+    app,
+    {
+      preferRest: true,
+    },
+    databaseId,
+  );
+
+  return firestoreInstance;
 }
 
 export function storageBucket() {
-  return getStorage(initializeFirebaseAdmin()).bucket(requireEnv("FIREBASE_STORAGE_BUCKET"));
+  const bucketName =
+    readEnv("FIREBASE_STORAGE_BUCKET") ?? requireEnv("NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET");
+  return getStorage(initializeFirebaseAdmin()).bucket(bucketName);
 }
