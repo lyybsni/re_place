@@ -28,6 +28,19 @@ FIREBASE_API_KEY=your_firebase_web_api_key
 FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
 NEXT_PUBLIC_GOOGLE_CLIENT_ID=your_google_oauth_web_client_id
 
+# Firebase client config (used by Firebase AI Logic on the server as well)
+NEXT_PUBLIC_FIREBASE_API_KEY=your_firebase_web_api_key
+NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=your-project.firebaseapp.com
+NEXT_PUBLIC_FIREBASE_PROJECT_ID=your-project-id
+NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
+NEXT_PUBLIC_FIREBASE_APP_ID=your_web_app_id
+NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=your_sender_id
+
+# Optional Firebase AI Logic config
+FIREBASE_AI_MODEL=gemini-2.5-flash
+FIREBASE_AI_BACKEND=google
+# FIREBASE_AI_LOCATION=global
+
 # Firebase Admin SDK (for Firestore/Storage-backed BFF)
 FIREBASE_PROJECT_ID=your-project-id
 FIREBASE_STORAGE_BUCKET=your-project-id.firebasestorage.app
@@ -44,6 +57,7 @@ The BFF now uses Firebase for:
 - Authentication: `/api/auth/login`, `/api/auth/logout`, `/api/auth/refresh`, `/api/auth/session`
 - Firestore data: `/api/articles`, `/api/admin/ai-options`, `/api/recommendations/today`, `/api/idealization/today`, `/api/places/digest`
 - Storage upload: article images are received as base64 data URLs and written to Firebase Storage during `POST /api/articles`.
+- AI Logic: `/api/ai/polish`, `/api/ai/extract`, `/api/ai/recommend`, plus AI-enriched article ingestion/recommendation flows
 
 ## Network / Proxy Note
 

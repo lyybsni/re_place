@@ -8,6 +8,7 @@ servers:
   - url: http://localhost:3000
 
 tags:
+  - name: AI
   - name: Articles
   - name: Admin
   - name: Auth
@@ -16,6 +17,96 @@ tags:
   - name: Places
 
 paths:
+  /api/ai/polish:
+    post:
+      tags: [AI]
+      summary: Polish a short memory article and return structured output
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiPolishRequest"
+      responses:
+        "200":
+          description: Polished article output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiPolishResponse"
+        "400":
+          description: Missing or invalid content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/ai/extract:
+    post:
+      tags: [AI]
+      summary: Extract structured fields from a short memory article
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiExtractRequest"
+      responses:
+        "200":
+          description: Structured extraction output
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiExtractResponse"
+        "400":
+          description: Missing or invalid content
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
+  /api/ai/recommend:
+    post:
+      tags: [AI]
+      summary: Generate structured recommendations from prompt and current user history
+      requestBody:
+        required: false
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/AiRecommendRequest"
+      responses:
+        "200":
+          description: Structured recommendation bundle
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/AiRecommendationResponse"
+        "400":
+          description: Invalid request payload
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
   /api/articles:
     get:
       tags: [Articles]
@@ -297,6 +388,158 @@ components:
         message:
           type: string
 
+    ArticleAiExtracted:
+      type: object
+      required: [summary, keywords, places]
+      properties:
+        summary:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        places:
+          type: array
+          items:
+            type: string
+        persons:
+          type: array
+          items:
+            type: string
+        organizations:
+          type: array
+          items:
+            type: string
+        dates:
+          type: array
+          items:
+            type: string
+        tone:
+          type: string
+
+    AiPolishRequest:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+        tone:
+          type: string
+
+    AiPolishResponse:
+      type: object
+      required: [mode, title, polishedText, summary, improvements, tone, extracted]
+      properties:
+        mode:
+          $ref: "#/components/schemas/AiMode"
+        title:
+          type: string
+        polishedText:
+          type: string
+        summary:
+          type: string
+        improvements:
+          type: array
+          items:
+            type: string
+        tone:
+          type: string
+        extracted:
+          $ref: "#/components/schemas/AiExtractPayload"
+
+    AiExtractRequest:
+      type: object
+      required: [content]
+      properties:
+        title:
+          type: string
+        content:
+          type: string
+
+    AiExtractPayload:
+      type: object
+      required:
+        [
+          summary,
+          keywords,
+          places,
+          persons,
+          organizations,
+          dates,
+          topic,
+          tone,
+          city,
+        ]
+      properties:
+        summary:
+          type: string
+        keywords:
+          type: array
+          items:
+            type: string
+        places:
+          type: array
+          items:
+            type: string
+        persons:
+          type: array
+          items:
+            type: string
+        organizations:
+          type: array
+          items:
+            type: string
+        dates:
+          type: array
+          items:
+            type: string
+        topic:
+          type: string
+        tone:
+          type: string
+        city:
+          type: string
+
+    AiExtractResponse:
+      allOf:
+        - type: object
+          required: [mode]
+          properties:
+            mode:
+              $ref: "#/components/schemas/AiMode"
+        - $ref: "#/components/schemas/AiExtractPayload"
+
+    AiRecommendRequest:
+      type: object
+      properties:
+        prompt:
+          type: string
+        context:
+          type: array
+          items:
+            type: string
+        maxRecommendations:
+          type: integer
+          minimum: 1
+          maximum: 10
+
+    AiRecommendationResponse:
+      type: object
+      required: [mode, contextSummary, cityRecommendation, topicRecommendations]
+      properties:
+        mode:
+          $ref: "#/components/schemas/AiMode"
+        contextSummary:
+          type: string
+        cityRecommendation:
+          $ref: "#/components/schemas/CityRecommendation"
+        topicRecommendations:
+          type: array
+          items:
+            $ref: "#/components/schemas/TopicRecommendation"
+
     LoginRequest:
       oneOf:
         - type: object
@@ -389,21 +632,6 @@ components:
         entry:
           $ref: "#/components/schemas/HistoryEntry"
 
-    HistoryEntryAiExtracted:
-      type: object
-      required: [summary, keywords, places]
-      properties:
-        summary:
-          type: string
-        keywords:
-          type: array
-          items:
-            type: string
-        places:
-          type: array
-          items:
-            type: string
-
     HistoryEntry:
       type: object
       required:
@@ -429,7 +657,7 @@ components:
             type: string
             format: uri
         aiExtracted:
-          $ref: "#/components/schemas/HistoryEntryAiExtracted"
+          $ref: "#/components/schemas/ArticleAiExtracted"
         articleTime:
           type: string
           format: date-time
@@ -486,6 +714,10 @@ components:
           type: string
         reason:
           type: string
+        confidence:
+          type: number
+          minimum: 0
+          maximum: 1
 
     PlaceDigest:
       type: object

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import ChinaDrilldownMap from "@/app/_components/china-drilldown-map";
 import type {
+  AiRecommendationResponse,
   CityRecommendation,
   PlaceDigest,
   TopicRecommendation,
@@ -18,20 +19,20 @@ export default function HomeDashboard() {
 
   useEffect(() => {
     async function load() {
-      const [cityRes, topicRes] = await Promise.all([
-        fetch("/api/idealization/today"),
-        fetch("/api/recommendations/today"),
-      ]);
+      const response = await fetch("/api/ai/recommend", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          prompt: "Generate city and topic recommendations for the signed-in user's home dashboard.",
+          maxRecommendations: 5,
+        }),
+      });
 
-      if (cityRes.ok) {
-        const cityData = (await cityRes.json()) as CityRecommendation;
-        setCityRecommendation(cityData);
-      }
-
-      if (topicRes.ok) {
-        const topicData = (await topicRes.json()) as unknown;
-        if (Array.isArray(topicData)) {
-          setTopics(topicData.slice(0, 5) as TopicRecommendation[]);
+      if (response.ok) {
+        const recommendation = (await response.json()) as AiRecommendationResponse;
+        setCityRecommendation(recommendation.cityRecommendation);
+        if (Array.isArray(recommendation.topicRecommendations)) {
+          setTopics(recommendation.topicRecommendations.slice(0, 5) as TopicRecommendation[]);
         }
       }
     }

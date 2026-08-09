@@ -31,3 +31,18 @@ The storage will be managed by Firebase Storage. The BFF will provide endpoints 
 1. Implement endpoints for uploading and retrieving files.
 2. Ensure file validation and enforce access control rules.
 3. Optimize file storage and retrieval for performance and scalability.
+
+## AI Logic
+
+The BFF will use Firebase AI Logic for three backend-side capabilities:
+
+1. article polish with structured output
+2. information extraction with structured output
+3. recommendation from prompt plus bounded context
+
+### Tasks
+
+1. Add dedicated AI endpoints for polish, extract, and recommend.
+2. Reuse the global AI mode switch so the system can run in `naive` or `llm` mode.
+3. Validate all model outputs on the server before returning or persisting them.
+4. Reuse extracted AI metadata in article persistence, search, and recommendation flows.

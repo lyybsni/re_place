@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { Timestamp } from "firebase-admin/firestore";
 import type {
+  ArticleAiExtracted,
   ArticleSortBy,
   CityRecommendation,
   HistoryEntry,
@@ -21,6 +22,10 @@ type CreateArticleInput = {
   imageStoragePaths: string[];
   useAiFineTune: boolean;
   articleTime?: string;
+  aiExtracted?: ArticleAiExtracted;
+  city?: string;
+  topic?: string;
+  tags?: string[];
 };
 
 type StoredArticle = {
@@ -32,11 +37,7 @@ type StoredArticle = {
   content: string;
   imageUrls: string[];
   imageStoragePaths: string[];
-  aiExtracted: {
-    summary: string;
-    keywords: string[];
-    places: string[];
-  };
+  aiExtracted: ArticleAiExtracted;
   articleTime: Timestamp;
   createTime: Timestamp;
   useAiFineTune: boolean;
@@ -67,7 +68,7 @@ function normalizeSortBy(value: string | null): ArticleSortBy {
   return "createTime";
 }
 
-function inferTopic(title: string, content: string) {
+export function inferTopicFromText(title: string, content: string) {
   const source = `${title} ${content}`.toLowerCase();
   if (source.includes("food") || source.includes("hotpot")) {
     return "Food Memory";
@@ -91,7 +92,7 @@ function extractKeywords(title: string, content: string) {
   return Array.from(new Set(words)).slice(0, 8);
 }
 
-function inferCity(text: string) {
+export function inferCityFromText(text: string) {
   const lower = text.toLowerCase();
   const mapping: Array<[string, string]> = [
     ["hangzhou", "Hangzhou"],
@@ -105,15 +106,19 @@ function inferCity(text: string) {
   return found?.[1] ?? "Unknown";
 }
 
-function buildAiExtracted(title: string, content: string) {
+export function buildNaiveAiExtracted(title: string, content: string): ArticleAiExtracted {
   const summaryBase = normalizeText(content || title);
   const summary = summaryBase.length > 160 ? `${summaryBase.slice(0, 160)}...` : summaryBase;
   const keywords = extractKeywords(title, content);
-  const places = [inferCity(`${title} ${content}`)].filter((city) => city !== "Unknown");
+  const places = [inferCityFromText(`${title} ${content}`)].filter((city) => city !== "Unknown");
   return {
     summary: summary || "No summary available.",
     keywords,
     places,
+    persons: [],
+    organizations: [],
+    dates: [],
+    tone: "reflective",
   };
 }
 
@@ -145,7 +150,7 @@ function toHistoryEntry(data: StoredArticle): HistoryEntry {
   };
 }
 
-function searchableText(entry: HistoryEntry): string {
+export function searchableText(entry: HistoryEntry): string {
   return [
     entry.title,
     entry.city,
@@ -154,6 +159,11 @@ function searchableText(entry: HistoryEntry): string {
     entry.tags.join(" "),
     entry.aiExtracted.summary,
     entry.aiExtracted.keywords.join(" "),
+    entry.aiExtracted.places.join(" "),
+    entry.aiExtracted.persons?.join(" ") ?? "",
+    entry.aiExtracted.organizations?.join(" ") ?? "",
+    entry.aiExtracted.dates?.join(" ") ?? "",
+    entry.aiExtracted.tone ?? "",
   ]
     .join(" ")
     .toLowerCase();
@@ -178,10 +188,13 @@ export async function createArticle(userId: string, input: CreateArticleInput) {
   const articleId = input.id ?? randomUUID();
   const title = normalizeText(input.title) || "Untitled";
   const content = input.content;
-  const topic = inferTopic(title, content);
-  const aiExtracted = buildAiExtracted(title, content);
-  const city = aiExtracted.places[0] ?? inferCity(`${title} ${content}`);
-  const tags = aiExtracted.keywords.slice(0, 5);
+  const aiExtracted = input.aiExtracted ?? buildNaiveAiExtracted(title, content);
+  const topic = normalizeText(input.topic ?? "") || inferTopicFromText(title, content);
+  const city =
+    normalizeText(input.city ?? "") ||
+    aiExtracted.places[0] ||
+    inferCityFromText(`${title} ${content}`);
+  const tags = (input.tags ?? aiExtracted.keywords.slice(0, 5)).map((item) => item.trim()).filter(Boolean);
 
   const now = new Date();
   const articleTime = input.articleTime ? new Date(input.articleTime) : now;
@@ -229,8 +242,7 @@ export async function listArticles(
   const search = searchInput?.trim() ?? "";
   const searchQuery = search.toLowerCase();
 
-  const snapshot = await articlesCollection(userId).get();
-  const entries = snapshot.docs.map((doc) => toHistoryEntry(doc.data() as StoredArticle));
+  const entries = await getArticleHistoryEntries(userId);
   const filtered = searchQuery
     ? entries.filter((entry) => searchableText(entry).includes(searchQuery))
     : entries;
@@ -246,6 +258,11 @@ export async function listArticles(
   }
 
   return { sortBy, search, entries: filtered };
+}
+
+export async function getArticleHistoryEntries(userId: string) {
+  const snapshot = await articlesCollection(userId).get();
+  return snapshot.docs.map((doc) => toHistoryEntry(doc.data() as StoredArticle));
 }
 
 export async function getPlaceDigest(userId: string, cityInput: string, email: string) {
@@ -276,8 +293,11 @@ export async function getPlaceDigest(userId: string, cityInput: string, email: s
 }
 
 export async function getTodayTopicRecommendations(userId: string) {
-  const snapshot = await articlesCollection(userId).get();
-  const entries = snapshot.docs.map((doc) => toHistoryEntry(doc.data() as StoredArticle));
+  const entries = await getArticleHistoryEntries(userId);
+  return buildNaiveTopicRecommendations(entries);
+}
+
+export function buildNaiveTopicRecommendations(entries: HistoryEntry[]) {
   const topicCounts = new Map<string, number>();
 
   for (const entry of entries) {
@@ -297,9 +317,11 @@ export async function getTodayTopicRecommendations(userId: string) {
 }
 
 export async function getTodayCityRecommendation(userId: string): Promise<CityRecommendation> {
-  const snapshot = await articlesCollection(userId).get();
-  const entries = snapshot.docs.map((doc) => toHistoryEntry(doc.data() as StoredArticle));
+  const entries = await getArticleHistoryEntries(userId);
+  return buildNaiveCityRecommendation(entries);
+}
 
+export function buildNaiveCityRecommendation(entries: HistoryEntry[]): CityRecommendation {
   if (!entries.length) {
     return {
       city: "Unknown",

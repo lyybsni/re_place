@@ -2,6 +2,16 @@ export type AiMode = "naive" | "llm";
 
 export type ArticleSortBy = "articleTime" | "createTime" | "topic" | "title";
 
+export interface ArticleAiExtracted {
+  summary: string;
+  keywords: string[];
+  places: string[];
+  persons?: string[];
+  organizations?: string[];
+  dates?: string[];
+  tone?: string;
+}
+
 export interface ArticleDraft {
   title: string;
   content: string;
@@ -28,6 +38,7 @@ export interface TopicRecommendation {
   id: string;
   title: string;
   reason: string;
+  confidence?: number;
 }
 
 export interface PlaceDigest {
@@ -45,11 +56,27 @@ export interface HistoryEntry {
   tags: string[];
   content: string;
   imageUrls: string[];
-  aiExtracted: {
-    summary: string;
-    keywords: string[];
-    places: string[];
-  };
+  aiExtracted: ArticleAiExtracted;
   articleTime: string;
   createTime: string;
+}
+
+export interface ArticlePolishResult {
+  title: string;
+  polishedText: string;
+  summary: string;
+  improvements: string[];
+  tone: string;
+}
+
+export interface ArticleExtractionResult extends ArticleAiExtracted {
+  topic: string;
+  city: string;
+}
+
+export interface AiRecommendationResponse {
+  mode: AiMode;
+  contextSummary: string;
+  cityRecommendation: CityRecommendation;
+  topicRecommendations: TopicRecommendation[];
 }
