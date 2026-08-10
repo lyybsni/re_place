@@ -578,23 +578,31 @@ export async function polishMemoryArticle(
 
 export async function extractMemoryArticle(
   mode: AiMode,
-  input: { title?: string; content: string },
+  input: { title?: string; content: string; city?: string; articleTime?: string },
   authIdToken: string,
 ) {
   const title = input.title?.trim() ?? "";
   const content = input.content.trim();
+  const selectedCity = input.city?.trim() ?? "";
+  const selectedArticleTime = input.articleTime?.trim() ?? "";
 
   if (mode === "naive") {
-    return buildNaiveExtractionResult(title, content);
+    const extracted = buildNaiveExtractionResult(title, content);
+    return {
+      ...extracted,
+      city: selectedCity || extracted.city,
+    };
   }
 
   return generateStructuredJson({
     authIdToken,
     systemInstruction:
-      "You extract structured metadata from short memory articles for a journaling app. Use only the provided content. If a field is absent, return an empty array or 'Unknown'. Return only valid JSON.",
+      "You extract structured metadata from short memory articles for a journaling app. Use the provided content and user-selected place/time as hints. If a field is absent, return an empty array or 'Unknown'. Return only valid JSON.",
     prompt: [
       "Extract structured information from the following short memory article.",
       `Title: ${title || "Untitled"}`,
+      `User-selected place: ${selectedCity || "Not provided"}`,
+      `User-selected time: ${selectedArticleTime || "Not provided"}`,
       `Content:\n${content}`,
     ].join("\n\n"),
     responseJsonSchema: {

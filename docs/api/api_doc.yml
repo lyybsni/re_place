@@ -368,6 +368,30 @@ paths:
               schema:
                 $ref: "#/components/schemas/ErrorMessage"
 
+  /api/places/city-counts:
+    get:
+      tags: [Places]
+      summary: Get current user's article counts for all map cities
+      responses:
+        "200":
+          description: Canonical city article counts
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [counts]
+                properties:
+                  counts:
+                    type: array
+                    items:
+                      $ref: "#/components/schemas/CityArticleCount"
+        "401":
+          description: Missing or invalid auth session
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ErrorMessage"
+
 components:
   schemas:
     AiMode:
@@ -735,3 +759,12 @@ components:
           type: array
           items:
             type: string
+
+    CityArticleCount:
+      type: object
+      required: [city, articleCount]
+      properties:
+        city:
+          type: string
+        articleCount:
+          type: integer

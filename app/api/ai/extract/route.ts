@@ -13,6 +13,8 @@ export async function POST(request: Request) {
     const payload = (await request.json()) as {
       title?: string;
       content?: string;
+      city?: string;
+      articleTime?: string;
     };
 
     const content = payload.content?.trim() ?? "";
@@ -24,6 +26,8 @@ export async function POST(request: Request) {
     const extractionResult = await extractMemoryArticle(mode, {
       title: payload.title,
       content,
+      city: payload.city,
+      articleTime: payload.articleTime,
     }, accessToken);
 
     return NextResponse.json({

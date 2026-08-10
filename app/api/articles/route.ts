@@ -10,11 +10,11 @@ import {
   validateArticlePayload,
 } from "@/lib/server/repositories/articles-repository";
 import { deleteStorageObjects, uploadArticleImages } from "@/lib/server/storage";
+import type { ArticleAiExtracted } from "@/lib/types";
 
 export async function GET(request: NextRequest) {
   try {
     const session = await requireSession();
-    const accessToken = await requireAccessToken();
     const sortBy = request.nextUrl.searchParams.get("sortBy");
     const search = request.nextUrl.searchParams.get("search");
     const result = await listArticles(session.userId, sortBy, search);
@@ -34,7 +34,12 @@ export async function POST(request: NextRequest) {
       content?: string;
       imageUrls?: string[];
       useAiFineTune?: boolean;
+      skipAiExtraction?: boolean;
       articleTime?: string;
+      city?: string;
+      topic?: string;
+      tags?: string[];
+      aiExtracted?: ArticleAiExtracted;
     };
 
     const title = payload.title ?? "";
@@ -49,10 +54,28 @@ export async function POST(request: NextRequest) {
         : null;
     const finalTitle = polishResult?.title ?? title;
     const finalContent = polishResult?.polishedText ?? content;
-    const extractionResult = await extractMemoryArticle(aiMode, {
-      title: finalTitle,
-      content: finalContent,
-    }, accessToken);
+    const previewExtracted = payload.aiExtracted;
+    const shouldReusePreviewMetadata = Boolean(payload.skipAiExtraction);
+    const extractionResult = shouldReusePreviewMetadata
+      ? null
+      : await extractMemoryArticle(
+          aiMode,
+          {
+            title: finalTitle,
+            content: finalContent,
+            city: payload.city,
+            articleTime: payload.articleTime,
+          },
+          accessToken,
+        );
+
+    const finalExtracted = shouldReusePreviewMetadata ? previewExtracted : extractionResult ?? undefined;
+
+    const manualCity = payload.city?.trim();
+    const manualTopic = payload.topic?.trim();
+    const manualTags = payload.tags?.map((item) => item.trim()).filter(Boolean);
+    const extractedCity = finalExtracted?.places?.[0];
+    const extractedTags = finalExtracted?.keywords?.slice(0, 5);
 
     const articleId = randomUUID();
     const uploaded = await uploadArticleImages(session.userId, articleId, imageUrls);
@@ -66,18 +89,10 @@ export async function POST(request: NextRequest) {
       imageStoragePaths: uploadedPaths,
       useAiFineTune: Boolean(payload.useAiFineTune),
       articleTime: payload.articleTime,
-      aiExtracted: {
-        summary: extractionResult.summary,
-        keywords: extractionResult.keywords,
-        places: extractionResult.places,
-        persons: extractionResult.persons,
-        organizations: extractionResult.organizations,
-        dates: extractionResult.dates,
-        tone: extractionResult.tone,
-      },
-      city: extractionResult.city,
-      topic: extractionResult.topic,
-      tags: extractionResult.keywords.slice(0, 5),
+      aiExtracted: finalExtracted,
+      city: manualCity || extractedCity,
+      topic: manualTopic || extractionResult?.topic,
+      tags: manualTags && manualTags.length > 0 ? manualTags : extractedTags,
     });
 
     return NextResponse.json(

@@ -9,6 +9,10 @@ export default function PlacesPage() {
             /api/places/digest?city=Hangzhou
           </code>
         </p>
+        <p className="mt-2 text-sm opacity-80">
+          Aggregated city count endpoint:{" "}
+          <code className="rounded bg-black/5 px-1 py-0.5">/api/places/city-counts</code>
+        </p>
       </section>
     </main>
   );

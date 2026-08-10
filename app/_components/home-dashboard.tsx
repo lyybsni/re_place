@@ -1,39 +1,116 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
-import ChinaDrilldownMap from "@/app/_components/china-drilldown-map";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ChinaBlockMap from "@/app/_components/china-block-map";
 import type {
   AiRecommendationResponse,
+  CityArticleCount,
   CityRecommendation,
   PlaceDigest,
   TopicRecommendation,
 } from "@/lib/types";
+
+const digestCache = new Map<string, PlaceDigest>();
+const digestInFlight = new Map<string, Promise<Map<string, PlaceDigest>>>();
+
+async function fetchCityDigests(cities: readonly string[]): Promise<Map<string, PlaceDigest>> {
+  const normalizedCities = Array.from(new Set(cities.map((city) => city.trim()).filter(Boolean)));
+  const result = new Map<string, PlaceDigest>();
+  if (normalizedCities.length === 0) {
+    return result;
+  }
+
+  const missingCities: string[] = [];
+  for (const city of normalizedCities) {
+    const cached = digestCache.get(city);
+    if (cached) {
+      result.set(city, cached);
+      continue;
+    }
+    missingCities.push(city);
+  }
+
+  if (missingCities.length === 0) {
+    return result;
+  }
+
+  const inFlightKey = missingCities.slice().sort().join("|");
+  const pending = digestInFlight.get(inFlightKey);
+  const request =
+    pending ??
+    fetch("/api/places/digest", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ cities: missingCities }),
+    })
+      .then(async (response) => {
+        if (!response.ok) {
+          throw new Error(`Failed to load place digests: ${response.status}`);
+        }
+        const payload = (await response.json()) as { digests?: PlaceDigest[] };
+        const map = new Map<string, PlaceDigest>();
+        for (const digest of payload.digests ?? []) {
+          map.set(digest.city, digest);
+        }
+        return map;
+      })
+      .finally(() => {
+        digestInFlight.delete(inFlightKey);
+      });
+  digestInFlight.set(inFlightKey, request);
+
+  const fetched = await request;
+  for (const [city, digest] of fetched) {
+    digestCache.set(city, digest);
+    result.set(city, digest);
+  }
+
+  return result;
+}
 
 export default function HomeDashboard() {
   const [cityRecommendation, setCityRecommendation] =
     useState<CityRecommendation | null>(null);
   const [topics, setTopics] = useState<TopicRecommendation[]>([]);
   const [selectedCity, setSelectedCity] = useState("Hangzhou");
-  const [placeDigest, setPlaceDigest] = useState<PlaceDigest | null>(null);
+  const [recommendedCityDigest, setRecommendedCityDigest] =
+    useState<PlaceDigest | null>(null);
+  const [cityArticleCounts, setCityArticleCounts] = useState<Record<string, number>>({});
+  const [nearbyCityDigests, setNearbyCityDigests] = useState<PlaceDigest[]>([]);
+  const [nearbyCityName, setNearbyCityName] = useState<string | null>(null);
+  const [nearbyLoading, setNearbyLoading] = useState(false);
+  const nearbyRequestRef = useRef(0);
 
   useEffect(() => {
     async function load() {
-      const response = await fetch("/api/ai/recommend", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          prompt: "Generate city and topic recommendations for the signed-in user's home dashboard.",
-          maxRecommendations: 5,
+      const [recommendationResult, countsResult] = await Promise.allSettled([
+        fetch("/api/ai/recommend", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            prompt: "Generate city and topic recommendations for the signed-in user's home dashboard.",
+            maxRecommendations: 5,
+          }),
         }),
-      });
+        fetch("/api/places/city-counts"),
+      ]);
 
-      if (response.ok) {
-        const recommendation = (await response.json()) as AiRecommendationResponse;
+      if (recommendationResult.status === "fulfilled" && recommendationResult.value.ok) {
+        const recommendation = (await recommendationResult.value.json()) as AiRecommendationResponse;
         setCityRecommendation(recommendation.cityRecommendation);
         if (Array.isArray(recommendation.topicRecommendations)) {
           setTopics(recommendation.topicRecommendations.slice(0, 5) as TopicRecommendation[]);
         }
+      }
+
+      if (countsResult.status === "fulfilled" && countsResult.value.ok) {
+        const payload = (await countsResult.value.json()) as { counts?: CityArticleCount[] };
+        const nextCounts: Record<string, number> = {};
+        for (const item of payload.counts ?? []) {
+          nextCounts[item.city] = item.articleCount;
+        }
+        setCityArticleCounts(nextCounts);
       }
     }
 
@@ -41,19 +118,22 @@ export default function HomeDashboard() {
   }, []);
 
   useEffect(() => {
-    async function loadDigest() {
-      const response = await fetch(
-        `/api/places/digest?city=${encodeURIComponent(selectedCity)}`,
-      );
-      if (!response.ok) {
+    async function loadRecommendedDigest() {
+      if (!cityRecommendation?.city || cityRecommendation.city === "Unknown") {
+        setRecommendedCityDigest(null);
         return;
       }
-      const digest = (await response.json()) as PlaceDigest;
-      setPlaceDigest(digest);
+
+      try {
+        const digestMap = await fetchCityDigests([cityRecommendation.city]);
+        setRecommendedCityDigest(digestMap.get(cityRecommendation.city) ?? null);
+      } catch {
+        setRecommendedCityDigest(null);
+      }
     }
 
-    void loadDigest();
-  }, [selectedCity]);
+    void loadRecommendedDigest();
+  }, [cityRecommendation?.city]);
 
   const normalizedTopics = useMemo(() => {
     if (topics.length < 3) {
@@ -61,6 +141,44 @@ export default function HomeDashboard() {
     }
     return topics.slice(0, 5);
   }, [topics]);
+
+  const handleMapCitySelect = useCallback(
+    async (city: string, nearbyCities: string[]) => {
+      setSelectedCity(city);
+      setNearbyCityName(city);
+      setNearbyLoading(true);
+
+      nearbyRequestRef.current += 1;
+      const requestId = nearbyRequestRef.current;
+      const targetCities = Array.from(new Set([city, ...nearbyCities]));
+      try {
+        const digestByCity = await fetchCityDigests(targetCities);
+        if (requestId === nearbyRequestRef.current) {
+          setCityArticleCounts((previous) => {
+            const next = { ...previous };
+            for (const [cityName, digest] of digestByCity) {
+              next[cityName] = digest.articleCount;
+            }
+            return next;
+          });
+          setNearbyCityDigests(
+            targetCities
+              .map((targetCity) => digestByCity.get(targetCity) ?? null)
+              .filter((digest): digest is PlaceDigest => Boolean(digest)),
+          );
+        }
+      } catch {
+        if (requestId === nearbyRequestRef.current) {
+          setNearbyCityDigests([]);
+        }
+      } finally {
+        if (requestId === nearbyRequestRef.current) {
+          setNearbyLoading(false);
+        }
+      }
+    },
+    [],
+  );
 
   return (
     <main className="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-6 p-6 lg:p-8">
@@ -88,7 +206,11 @@ export default function HomeDashboard() {
               {cityRecommendation?.brief ?? "Loading recommendation..."}
             </p>
             <p className="mt-2 text-xs text-slate-500">
-              Articles: {cityRecommendation?.digest.ingestedArticles ?? 0}
+              Articles: {recommendedCityDigest?.articleCount ?? "Loading..."}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Top topics:{" "}
+              {recommendedCityDigest?.topics.join(", ") || "Loading..."}
             </p>
           </article>
 
@@ -129,28 +251,33 @@ export default function HomeDashboard() {
         </div>
 
         <article className="rounded-2xl border border-indigo-100 bg-white p-5 shadow-sm lg:col-span-2">
-          <h2 className="font-semibold text-indigo-900">Interactive China Map</h2>
+          <h2 className="font-semibold text-indigo-900">Interactive China Block Map</h2>
           <p className="mt-2 text-sm text-slate-700">
-            Click a province to drill down, then click a city to load place digest
-            information.
+            Hover a block to inspect the likely city and its article count. Click a block to view nearby city digests.
           </p>
 
           <div className="mt-4 overflow-hidden rounded-2xl border border-slate-200 bg-slate-50 p-3">
-            <ChinaDrilldownMap onCitySelectAction={setSelectedCity} />
+            <ChinaBlockMap
+              cityArticleCounts={cityArticleCounts}
+              nearbyCityDigests={nearbyCityDigests}
+              nearbyCityName={nearbyCityName}
+              nearbyLoading={nearbyLoading}
+              onCitySelectAction={handleMapCitySelect}
+            />
           </div>
 
           <div className="mt-4 rounded-xl border border-slate-200 bg-white p-4 text-sm">
             <p>
               <span className="font-medium text-slate-800">City: </span>
-              {placeDigest?.city ?? selectedCity}
+              {nearbyCityName ?? selectedCity}
             </p>
             <p className="mt-1">
-              <span className="font-medium text-slate-800">Articles: </span>
-              {placeDigest?.articleCount ?? 0}
+              <span className="font-medium text-slate-800">Nearby digests loaded: </span>
+              {nearbyCityDigests.length}
             </p>
             <p className="mt-1">
-              <span className="font-medium text-slate-800">Avatars: </span>
-              {(placeDigest?.avatars ?? []).join(", ") || "None"}
+              <span className="font-medium text-slate-800">Status: </span>
+              {nearbyLoading ? "Loading nearby digests..." : "Ready"}
             </p>
           </div>
         </article>

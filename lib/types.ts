@@ -18,10 +18,10 @@ export interface ArticleDraft {
   imageUrls: string[];
   articleTime?: string;
   useAiFineTune: boolean;
-}
-
-export interface PlaceDigestQuery {
-  city: string;
+  city?: string;
+  topic?: string;
+  tags?: string[];
+  aiExtracted?: ArticleAiExtracted;
 }
 
 export interface CityRecommendation {
@@ -46,6 +46,11 @@ export interface PlaceDigest {
   articleCount: number;
   avatars: string[];
   topics: string[];
+}
+
+export interface CityArticleCount {
+  city: string;
+  articleCount: number;
 }
 
 export interface HistoryEntry {

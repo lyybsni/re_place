@@ -14,6 +14,8 @@ export async function POST(request: Request) {
       title?: string;
       content?: string;
       tone?: string;
+      city?: string;
+      articleTime?: string;
     };
 
     const content = payload.content?.trim() ?? "";
@@ -30,6 +32,8 @@ export async function POST(request: Request) {
     const extractionResult = await extractMemoryArticle(mode, {
       title: polishResult.title,
       content: polishResult.polishedText,
+      city: payload.city,
+      articleTime: payload.articleTime,
     }, accessToken);
 
     return NextResponse.json({

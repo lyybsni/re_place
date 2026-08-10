@@ -16,8 +16,20 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), "Segoe UI", Arial, sans-serif;
+  position: relative;
+  min-height: 100vh;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
   background-image:
     radial-gradient(circle at 10% 10%, #e0e7ff 0, transparent 30%),
     radial-gradient(circle at 85% 15%, #dbeafe 0, transparent 22%);
-  min-height: 100vh;
+  background-repeat: no-repeat;
+  background-size: cover;
+  background-position: center top;
+  pointer-events: none;
 }

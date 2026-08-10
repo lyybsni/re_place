@@ -3,6 +3,7 @@ import { Timestamp } from "firebase-admin/firestore";
 import type {
   ArticleAiExtracted,
   ArticleSortBy,
+  CityArticleCount,
   CityRecommendation,
   HistoryEntry,
   PlaceDigest,
@@ -10,6 +11,7 @@ import type {
 } from "@/lib/types";
 import { ApiError } from "@/lib/server/api-error";
 import { db } from "@/lib/server/firebase-admin";
+import { getCanonicalChinaBlockCities, toCanonicalCityName } from "@/lib/city-name-mapping";
 
 export const MAX_IMAGE_COUNT = 3;
 export const MAX_CONTENT_CHARS = 600;
@@ -190,10 +192,11 @@ export async function createArticle(userId: string, input: CreateArticleInput) {
   const content = input.content;
   const aiExtracted = input.aiExtracted ?? buildNaiveAiExtracted(title, content);
   const topic = normalizeText(input.topic ?? "") || inferTopicFromText(title, content);
-  const city =
+  const rawCity =
     normalizeText(input.city ?? "") ||
     aiExtracted.places[0] ||
     inferCityFromText(`${title} ${content}`);
+  const city = toCanonicalCityName(rawCity) ?? rawCity;
   const tags = (input.tags ?? aiExtracted.keywords.slice(0, 5)).map((item) => item.trim()).filter(Boolean);
 
   const now = new Date();
@@ -267,29 +270,83 @@ export async function getArticleHistoryEntries(userId: string) {
 
 export async function getPlaceDigest(userId: string, cityInput: string, email: string) {
   const city = cityInput.trim();
-  const cityLower = city.toLowerCase();
-  const snapshot = await articlesCollection(userId).get();
-  const entries = snapshot.docs
-    .map((doc) => toHistoryEntry(doc.data() as StoredArticle))
-    .filter((entry) => entry.city.toLowerCase() === cityLower);
+  const digests = await getPlaceDigests(userId, [city], email);
+  return (
+    digests[0] ?? {
+      city,
+      articleCount: 0,
+      avatars: [],
+      topics: [],
+    }
+  );
+}
 
-  const topicCounts = new Map<string, number>();
-  for (const entry of entries) {
-    topicCounts.set(entry.topic, (topicCounts.get(entry.topic) ?? 0) + 1);
+export async function getPlaceDigests(userId: string, citiesInput: readonly string[], email: string) {
+  const normalizedRequests = citiesInput
+    .map((city) => city.trim())
+    .filter(Boolean)
+    .map((city) => ({ city, canonicalCity: toCanonicalCityName(city) }));
+  if (normalizedRequests.length === 0) {
+    return [];
   }
 
-  const topics = [...topicCounts.entries()]
-    .sort((a, b) => b[1] - a[1])
-    .slice(0, 5)
-    .map(([topic]) => topic);
+  const uniqueCanonicalCities = Array.from(
+    new Set(normalizedRequests.map((item) => item.canonicalCity).filter((city): city is string => Boolean(city))),
+  );
+  const canonicalCitySet = new Set(uniqueCanonicalCities);
 
-  const digest: PlaceDigest = {
+  const snapshot = await articlesCollection(userId).get();
+  const entries = snapshot.docs.map((doc) => toHistoryEntry(doc.data() as StoredArticle));
+
+  const articleCounts = new Map<string, number>();
+  const topicCountsByCity = new Map<string, Map<string, number>>();
+
+  for (const entry of entries) {
+    const canonicalEntryCity = toCanonicalCityName(entry.city);
+    if (!canonicalEntryCity || !canonicalCitySet.has(canonicalEntryCity)) {
+      continue;
+    }
+
+    articleCounts.set(canonicalEntryCity, (articleCounts.get(canonicalEntryCity) ?? 0) + 1);
+    const topicCounts = topicCountsByCity.get(canonicalEntryCity) ?? new Map<string, number>();
+    topicCounts.set(entry.topic, (topicCounts.get(entry.topic) ?? 0) + 1);
+    topicCountsByCity.set(canonicalEntryCity, topicCounts);
+  }
+
+  return normalizedRequests.map(({ city, canonicalCity }) => {
+    const topicCounts = canonicalCity ? (topicCountsByCity.get(canonicalCity) ?? new Map<string, number>()) : new Map<string, number>();
+    const topics = [...topicCounts.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 5)
+      .map(([topic]) => topic);
+    const articleCount = canonicalCity ? (articleCounts.get(canonicalCity) ?? 0) : 0;
+    return {
+      city,
+      articleCount,
+      avatars: articleCount > 0 ? [initialsFromEmail(email)] : [],
+      topics,
+    } satisfies PlaceDigest;
+  });
+}
+
+export async function getAllCityArticleCounts(userId: string): Promise<CityArticleCount[]> {
+  const canonicalCities = getCanonicalChinaBlockCities();
+  const articleCounts = new Map<string, number>(canonicalCities.map((city) => [city, 0]));
+
+  const snapshot = await articlesCollection(userId).get();
+  for (const doc of snapshot.docs) {
+    const entry = toHistoryEntry(doc.data() as StoredArticle);
+    const canonicalCity = toCanonicalCityName(entry.city);
+    if (!canonicalCity || !articleCounts.has(canonicalCity)) {
+      continue;
+    }
+    articleCounts.set(canonicalCity, (articleCounts.get(canonicalCity) ?? 0) + 1);
+  }
+
+  return canonicalCities.map((city) => ({
     city,
-    articleCount: entries.length,
-    avatars: entries.length > 0 ? [initialsFromEmail(email)] : [],
-    topics,
-  };
-  return digest;
+    articleCount: articleCounts.get(city) ?? 0,
+  }));
 }
 
 export async function getTodayTopicRecommendations(userId: string) {
@@ -337,7 +394,8 @@ export function buildNaiveCityRecommendation(entries: HistoryEntry[]): CityRecom
   const cityCounts = new Map<string, number>();
   const topicCounts = new Map<string, number>();
   for (const entry of entries) {
-    cityCounts.set(entry.city, (cityCounts.get(entry.city) ?? 0) + 1);
+    const normalizedCity = toCanonicalCityName(entry.city) ?? entry.city;
+    cityCounts.set(normalizedCity, (cityCounts.get(normalizedCity) ?? 0) + 1);
     topicCounts.set(entry.topic, (topicCounts.get(entry.topic) ?? 0) + 1);
   }
 

@@ -55,7 +55,7 @@ If you prefer ADC credentials, set `GOOGLE_APPLICATION_CREDENTIALS=/absolute/pat
 The BFF now uses Firebase for:
 
 - Authentication: `/api/auth/login`, `/api/auth/logout`, `/api/auth/refresh`, `/api/auth/session`
-- Firestore data: `/api/articles`, `/api/admin/ai-options`, `/api/recommendations/today`, `/api/idealization/today`, `/api/places/digest`
+- Firestore data: `/api/articles`, `/api/admin/ai-options`, `/api/recommendations/today`, `/api/idealization/today`, `/api/places/digest`, `/api/places/city-counts`
 - Storage upload: article images are received as base64 data URLs and written to Firebase Storage during `POST /api/articles`.
 - AI Logic: `/api/ai/polish`, `/api/ai/extract`, `/api/ai/recommend`, plus AI-enriched article ingestion/recommendation flows
 
